@@ -18,7 +18,11 @@ jobs:
 
       - name: Install dependencies
         run: |
-          julia --project=docs -e 'using Pkg; Pkg.instantiate(); Pkg.develop(path=".")'
+          julia --project=docs -e '
+            using Pkg
+            Pkg.develop(path=".")
+            Pkg.add(url="https://github.com/rikenbit/OnlinePCA.jl")
+            Pkg.instantiate()'
 
       - name: Build and deploy documentation
         env:

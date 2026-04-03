@@ -36,5 +36,10 @@ jobs:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
       - uses: julia-actions/cache@v2
-      - uses: julia-actions/julia-buildpkg@v1
+      - name: Install OnlinePCA dependency from GitHub
+        run: |
+          julia --project=. -e '
+            using Pkg
+            Pkg.add(url="https://github.com/rikenbit/OnlinePCA.jl")
+            Pkg.instantiate()'
       - uses: julia-actions/julia-runtest@v1
