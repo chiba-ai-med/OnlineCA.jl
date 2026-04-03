@@ -1,0 +1,46 @@
+using OnlineCA
+using ArgParse:
+    ArgParseSettings, parse_args, @add_arg_table
+
+# main
+function main()
+    camodel = OnlineCA.CA()
+    parsed_args = OnlineCA.parse_commandline(camodel)
+    println("Parsed args:")
+    for (arg, val) in parsed_args
+        println("  $arg  =>  ", repr(val))
+    end
+
+    if parsed_args["dim"] == 3
+        dim = 3
+    else
+        dim = parse(Int64, parsed_args["dim"])
+    end
+
+    if parsed_args["noversamples"] == 5
+        noversamples = 5
+    else
+        noversamples = parse(Int64, parsed_args["noversamples"])
+    end
+
+    if parsed_args["niter"] == 3
+        niter = 3
+    else
+        niter = parse(Int64, parsed_args["niter"])
+    end
+
+    if parsed_args["chunksize"] == 0
+        chunksize = 0
+    else
+        chunksize = parse(Int64, parsed_args["chunksize"])
+    end
+
+    out = OnlineCA.ca(input=parsed_args["input"],
+        dim=dim,
+        noversamples=noversamples,
+        niter=niter,
+        chunksize=chunksize)
+    OnlineCA.output(parsed_args["outdir"], out)
+end
+
+main()
