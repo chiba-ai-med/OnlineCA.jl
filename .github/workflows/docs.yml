@@ -1,0 +1,27 @@
+name: Documentation
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Julia (pin to 1.10 LTS)
+        uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.10'
+
+      - name: Install dependencies
+        run: |
+          julia --project=docs -e 'using Pkg; Pkg.instantiate(); Pkg.develop(path=".")'
+
+      - name: Build and deploy documentation
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          julia --project=docs docs/make.jl
