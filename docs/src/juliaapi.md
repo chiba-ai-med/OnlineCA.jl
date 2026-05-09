@@ -2,15 +2,27 @@
 
 ## Correspondence Analysis (CA)
 ```@docs
-ca(;input::AbstractString="", outdir::Union{Nothing,AbstractString}=nothing, dim::Number=3, noversamples::Number=5, niter::Number=3, chunksize::Number=0)
+ca
 ```
 
 ## Sparse Correspondence Analysis (SparseCA)
 ```@docs
-sparse_ca(;input::AbstractString="", outdir::Union{Nothing,AbstractString}=nothing, dim::Number=3, noversamples::Number=5, niter::Number=3, chunksize::Number=0)
+sparse_ca
 ```
 
 ## BinCOO Correspondence Analysis (BinCOOCA)
 ```@docs
-bincoo_ca(;input::AbstractString="", outdir::Union{Nothing,AbstractString}=nothing, dim::Number=3, noversamples::Number=5, niter::Number=3, chunksize::Number=0)
+bincoo_ca
+```
+
+## Multiple Correspondence Analysis (MCA)
+```@docs
+mca
+categorical_to_bincoo
+```
+
+## Supplementary projection
+```@docs
+project_rows
+project_columns
 ```

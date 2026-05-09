@@ -7,7 +7,7 @@ Online Correspondence Analysis
 [![Documentation](https://img.shields.io/badge/docs-dev-blue.svg)](https://chiba-ai-med.github.io/OnlineCA.jl/dev)
 
 ## Description
-OnlineCA.jl performs out-of-core Correspondence Analysis (CA) for extremely large scale matrix without loading the whole data on the memory space.
+OnlineCA.jl performs out-of-core Correspondence Analysis (CA) for extremely large scale matrix without loading the whole data on the memory space. Multiple Correspondence Analysis (MCA) on categorical tables is also supported via the same out-of-core machinery.
 
 CA is a statistical method to analyze a contingency table by decomposing the standardized residual matrix
 
@@ -17,10 +17,11 @@ S = D_r^{-1/2} (P - r_p c_p') D_c^{-1/2}
 
 where `P = X / n` is the relative-frequency matrix, `r_p = P 1` is the row-mass vector, `c_p = P' 1` is the column-mass vector, and `D_r = diag(r_p)`, `D_c = diag(c_p)` are the corresponding diagonal mass matrices. The matrix `S` is never explicitly formed. Instead, matrix–vector products `S * v` and `S' * u` are computed by streaming through the data, and the top singular triplets are extracted with a Halko-style randomized SVD.
 
-__Note: The input matrix is supposed to be a non-negative count matrix (contingency table).__
+__Note: The input matrix is supposed to be a non-negative count matrix (contingency table) for CA, or an integer-coded categorical table for MCA.__
 
 ## Algorithms
 - Halko-style Randomized SVD on the implicit standardized residual matrix : [Halko, N. et al., 2011](https://arxiv.org/abs/0909.4061), [Halko, N. et al., 2011](https://epubs.siam.org/doi/abs/10.1137/100804139)
+- Multiple Correspondence Analysis (MCA) via indicator matrix → CA, with Benzécri / Greenacre eigenvalue corrections
 
 ## Installation
 ```julia
@@ -170,7 +171,7 @@ G_new = project_columns(out, new_cols)     # n_new × dim
 
 ## Multiple Correspondence Analysis (MCA)
 
-`mca(table)` runs MCA on an `N × q` integer-coded categorical table by building the indicator matrix, calling `bincoo_ca`, and attaching MCA metadata (`variables`, `categories`, `var_of_category`, `q`). Optional `correction = :benzecri / :greenacre` applies the standard eigenvalue adjustment.
+`mca(table)` runs MCA on an `N × q` integer-coded categorical table by building the indicator matrix, calling `bincoo_ca`, and attaching MCA metadata. Optional `correction = :benzecri / :greenacre` applies the standard eigenvalue adjustment. **`mca` is available as a Julia API only** — there is no command-line binary because indicator-matrix preparation is naturally an in-memory step.
 
 ```julia
 # Synthetic categorical data: 200 obs × 4 vars, each with 3 levels
@@ -183,6 +184,20 @@ out_mca = mca(table; dim=3, correction=:benzecri,
 out_mca.inertia_adjusted        # length dim
 out_mca.total_inertia_adjusted  # scalar
 ```
+
+The result NamedTuple extends the CA fields above with the following MCA-specific entries:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `variables` | `Vector{String}` (length `q`) | Variable names |
+| `categories` | `Vector{String}` (length `M`) | Category labels |
+| `var_of_category` | `Vector{Int}` (length `M`) | Index of the variable that owns each category |
+| `q` | `Int` | Number of variables |
+| `correction` | `Symbol` | `:none / :benzecri / :greenacre` |
+| `inertia_adjusted` | `Vector` (length `dim`) | Per-axis adjusted eigenvalues |
+| `total_inertia_adjusted` | `Real` | Adjusted total inertia |
+
+When `outdir` is given, `mca` additionally writes `Categories.csv`, `Variables.csv`, `Var_of_category.csv`, `Inertia_adjusted.csv`, and `Total_inertia_adjusted.csv` next to the standard CA outputs.
 
 ## Command line usage
 The type of input file is assumed to be CSV, MM, or BinCOO format, and is preprocessed to a Zstandard-compressed binary file by `csv2bin`, `mm2bin`, or `bincoo2bin` in the `OnlinePCA` package. The binary file is specified as the input of the CA functions in `OnlineCA`. All CA functions can be performed as command line tools with the same parameter names like below.

@@ -1,7 +1,5 @@
 [deps]
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
-OnlineCA = "234ac5d4-8d69-4947-8f13-5588d43e8dc9"
-OnlinePCA = "975b03d1-ab45-5730-8389-540698ac00dc"
 
 [compat]
 Documenter = "1"

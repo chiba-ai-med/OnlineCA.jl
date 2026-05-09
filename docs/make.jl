@@ -5,6 +5,7 @@ makedocs(
     sitename = "OnlineCA.jl",
     modules = [OnlineCA],
     format = Documenter.HTML(prettyurls = true),
+    checkdocs = :exports,
     pages = [
         "Home" => "index.md",
         "Julia API" => "juliaapi.md",
