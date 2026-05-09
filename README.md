@@ -26,7 +26,7 @@ __Note: The input matrix is supposed to be a non-negative count matrix (continge
 ## Installation
 ```julia
 # push the key "]" and type the following command.
-(@julia) pkg> add https://github.com/rikenbit/OnlinePCA.jl
+(@julia) pkg> add OnlinePCA
 (@julia) pkg> add https://github.com/chiba-ai-med/OnlineCA.jl
 (@julia) pkg> add PlotlyJS
 # After that, push Ctrl + C to leave from Pkg REPL mode

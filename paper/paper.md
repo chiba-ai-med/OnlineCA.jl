@@ -27,7 +27,7 @@ Despite its broad applicability, CA becomes computationally prohibitive for larg
 
 # Statement of need
 
-CA is a workhorse algorithm for exploring contingency tables. However, as the size of the data matrix increases, it often becomes too large to fit into memory. In such cases, an out-of-core (OOC) implementation — where only subsets of data stored on disk are loaded into memory for computation — is desirable. Additionally, representing the data in a sparse matrix format, where only non-zero values and their coordinates are stored, is computationally advantageous. Therefore, a CA implementation that supports both OOC computation and sparse data handling is highly desirable (Figure 1).
+As the data matrix grows beyond memory, an out-of-core (OOC) implementation — loading only subsets of the data from disk on demand — is desirable. Sparse storage of non-zero entries is additionally advantageous. A CA implementation that supports both is therefore highly desirable (Figure 1).
 
 Similar discussions have been made in the context of PCA and Non-negative Matrix Factorization (NMF), and we have independently developed Julia packages \texttt{OnlinePCA.jl} [@onlinepcajljoss; @onlinepcajl] and \texttt{OnlineNMF.jl} [@onlinenmfjl]. \texttt{OnlineCA.jl} is a spin-off version of these, implementing CA.
 
@@ -50,10 +50,11 @@ CA can be easily reproduced on any machine where Julia is pre-installed by using
 First, install \texttt{OnlineCA.jl} directly from GitHub:
 
 ```julia
-# Install OnlinePCA.jl (used for binary I/O preprocessing)
-julia> Pkg.add(url="https://github.com/rikenbit/OnlinePCA.jl.git")
+# Install OnlinePCA.jl from the General registry
+# (used for binary I/O preprocessing).
+julia> Pkg.add("OnlinePCA")
 
-# Install OnlineCA.jl
+# Install OnlineCA.jl from GitHub.
 julia> Pkg.add(url="https://github.com/chiba-ai-med/OnlineCA.jl.git")
 ```
 
@@ -92,7 +93,7 @@ mm2bin(mmfile=joinpath(tmp, "Data.mtx"),
 
 ## Plot settings
 
-Define a helper function to visualize the row coordinates of CA using the \texttt{PlotlyJS.jl} package. It generates two subplots: Component-1 vs Component-2 and Component-2 vs Component-3, with color-coded groups.
+A `subplots` helper using `PlotlyJS.jl` produces side-by-side scatter plots of the first three principal components.
 
 ```julia
 using DataFrames
@@ -173,7 +174,7 @@ out_mca = mca(table; dim=3, correction=:benzecri,
 # out_mca.inertia_adjusted, out_mca.total_inertia_adjusted, ...
 ```
 
-For more details, including the BinCOO variant for binary contingency tables, see the README.md of \texttt{OnlineCA.jl} at \url{https://github.com/chiba-ai-med/OnlineCA.jl}.
+A reference comparison against R's \texttt{ca} package on the classic Greenacre [@greenacre2017] smoke dataset is included in the test suite. See the README at \url{https://github.com/chiba-ai-med/OnlineCA.jl} for the BinCOO variant and supplementary projection examples.
 
 # Related work
 
