@@ -35,7 +35,7 @@ jobs:
         with:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
-      - uses: julia-actions/cache@v2
+      - uses: julia-actions/cache@v3
       - name: Install OnlinePCA dependency from GitHub
         run: |
           julia --project=. -e '
