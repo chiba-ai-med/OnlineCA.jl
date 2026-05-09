@@ -182,9 +182,9 @@ There are various implementations of CA / MCA [@cajl; @factominer; @vegan; @prin
 | Function Name | Language | OOC | Sparse Format | MCA |
 |:------ | :----: | :----: | :----: | :----: |
 | \texttt{MASS::corresp}     | R      | No  | -         | No  |
-| \texttt{ca::ca}            | R      | No  | -         | -   |
+| \texttt{ca::ca}            | R      | No  | -         | No  |
 | \texttt{ca::mjca}          | R      | No  | -         | Yes |
-| \texttt{FactoMineR::CA}    | R      | No  | -         | -   |
+| \texttt{FactoMineR::CA}    | R      | No  | -         | No  |
 | \texttt{FactoMineR::MCA}   | R      | No  | -         | Yes |
 | \texttt{vegan::cca}        | R      | No  | -         | No  |
 | \texttt{prince.CA/MCA}     | Python | No  | -         | Yes |
