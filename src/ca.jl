@@ -33,6 +33,8 @@ function ca(;
     noversamples::Number=5,
     niter::Number=3,
     chunksize::Number=0,
+    rng::AbstractRNG=default_rng(),
+    seed::Union{Nothing,Integer}=nothing,
 )
     # Initial Setting
     N, M = Int64.(nm(input))
@@ -62,7 +64,8 @@ function ca(;
     rowsums, colsums, total = compute_sums_dense(input, N, M, chunksize)
 
     # Compute CA using randomized SVD
-    out = ca_rsvd_dense(input, N, M, dim, noversamples, niter, chunksize, rowsums, colsums, total)
+    eff_rng = _make_rng(rng, seed)
+    out = ca_rsvd_dense(input, N, M, dim, noversamples, niter, chunksize, rowsums, colsums, total, eff_rng)
 
     # Output
     if outdir isa String
@@ -203,13 +206,13 @@ function implicit_St_times_Q_dense(input, N, M, chunksize, rowsums, colsums, tot
 end
 
 # Randomized SVD for CA (dense)
-function ca_rsvd_dense(input, N, M, dim, noversamples, niter, chunksize, rowsums, colsums, total)
+function ca_rsvd_dense(input, N, M, dim, noversamples, niter, chunksize, rowsums, colsums, total, rng::AbstractRNG=default_rng())
     l = dim + noversamples
     @assert 0 < dim <= l <= min(N, M)
 
     # Step 1: Random projection Y = S * Omega
     println("Random Projection: Y = S * Omega")
-    Omega = rand(Float64, M, l)
+    Omega = rand(rng, Float64, M, l)
     Y = implicit_S_times_Omega_dense(input, N, M, chunksize, rowsums, colsums, total, Omega)
 
     # Step 2: QR factorization

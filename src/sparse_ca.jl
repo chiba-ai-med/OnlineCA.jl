@@ -27,6 +27,8 @@ function sparse_ca(;
     noversamples::Number=5,
     niter::Number=3,
     chunksize::Number=0,
+    rng::AbstractRNG=default_rng(),
+    seed::Union{Nothing,Integer}=nothing,
 )
     # Initial Setting
     N, M = Int64.(nm(input))
@@ -56,7 +58,8 @@ function sparse_ca(;
     rowsums, colsums, total = compute_sums_sparse(input, N, M)
 
     # Compute CA using randomized SVD
-    out = ca_rsvd_sparse(input, N, M, dim, noversamples, niter, chunksize, rowsums, colsums, total)
+    eff_rng = _make_rng(rng, seed)
+    out = ca_rsvd_sparse(input, N, M, dim, noversamples, niter, chunksize, rowsums, colsums, total, eff_rng)
 
     # Output
     if outdir isa String
@@ -211,12 +214,12 @@ function implicit_St_times_Q_sparse(input, N, M, chunksize, rowsums, colsums, to
 end
 
 # Randomized SVD for CA (sparse)
-function ca_rsvd_sparse(input, N, M, dim, noversamples, niter, chunksize, rowsums, colsums, total)
+function ca_rsvd_sparse(input, N, M, dim, noversamples, niter, chunksize, rowsums, colsums, total, rng::AbstractRNG=default_rng())
     l = dim + noversamples
     @assert 0 < dim <= l <= min(N, M)
 
     println("Random Projection: Y = S * Omega")
-    Omega = rand(Float64, M, l)
+    Omega = rand(rng, Float64, M, l)
     Y = implicit_S_times_Omega_sparse(input, N, M, chunksize, rowsums, colsums, total, Omega)
 
     println("QR factorization: Q = qr(Y)")

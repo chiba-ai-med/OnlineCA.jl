@@ -11,7 +11,7 @@ using LinearAlgebra:
 using ProgressMeter:
     Progress, next!
 using Random:
-    rand
+    rand, AbstractRNG, MersenneTwister, default_rng
 using SparseArrays:
     sparse, spzeros
 using Statistics:

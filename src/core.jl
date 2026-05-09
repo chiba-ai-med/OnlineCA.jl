@@ -17,6 +17,15 @@ S = D_r^{-1/2} (P - r_p c_p^T) D_c^{-1/2} = U Σ V^T  (SVD)
   colcos2    : (σ_k v_jk)^2 / Σ_i S_ij^2                     (M × dim)
 """
 
+"""
+Resolve an effective RNG. When `seed === nothing`, return `rng` unchanged so
+callers can thread their own state. When `seed` is given, build a fresh
+`MersenneTwister(seed)` so the run is reproducible regardless of any external
+RNG state.
+"""
+_make_rng(rng::AbstractRNG, ::Nothing) = rng
+_make_rng(::AbstractRNG, seed::Integer) = MersenneTwister(seed)
+
 # Defensive 1/sqrt: returns 0 for non-positive masses (Phase 4 will filter).
 @inline _safe_inv_sqrt(x::Real) = x > 0 ? 1 / sqrt(x) : zero(x)
 
