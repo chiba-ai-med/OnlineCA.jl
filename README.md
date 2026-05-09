@@ -2,6 +2,7 @@
 Online Correspondence Analysis
 
 [![Build Status](https://github.com/chiba-ai-med/OnlineCA.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/chiba-ai-med/OnlineCA.jl/actions/workflows/CI.yml?query=branch%3Amain)
+[![DOI](https://zenodo.org/badge/1200450596.svg)](https://doi.org/10.5281/zenodo.20096927)
 
 ## 📚 Documentation
 [![Documentation](https://img.shields.io/badge/docs-dev-blue.svg)](https://chiba-ai-med.github.io/OnlineCA.jl/dev)
