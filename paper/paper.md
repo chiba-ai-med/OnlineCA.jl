@@ -21,7 +21,7 @@ bibliography: paper.bib
 
 # Summary
 
-Correspondence Analysis (CA) is a multivariate technique for the exploratory analysis of contingency tables [@hill1974; @greenacre2017]. Like Principal Component Analysis (PCA), CA decomposes a data matrix into low-dimensional row and column scores, but it operates on a standardized residual matrix that compares observed counts with the expectation under independence. CA has been widely applied across diverse fields including ecology [@terbraak], linguistics and text analysis [@greenacre2017], market research [@greenacre2017], and more recently single-cell omics [@corral].
+Correspondence Analysis (CA) is a multivariate technique for the exploratory analysis of contingency tables [@hill1974; @greenacre2017], widely applied across ecology [@terbraak], linguistics and text analysis [@greenacre2017], market research [@greenacre2017], and more recently single-cell omics [@corral].
 
 Despite its broad applicability, CA becomes computationally prohibitive for large data matrices, since it requires the singular value decomposition (SVD) of an N $\times$ M matrix. In particular, recent advances in single-cell omics have led to datasets with millions of cells, for which standard CA implementations often fail to scale. To meet this requirement, I present \texttt{OnlineCA.jl}, a Julia package for out-of-core and sparse CA (\url{https://github.com/chiba-ai-med/OnlineCA.jl}). The same out-of-core machinery is reused to support Multiple Correspondence Analysis (MCA) on large categorical tables, including the standard Benzécri [@benzecri1979] and Greenacre [@greenacre2017] eigenvalue corrections.
 
@@ -29,7 +29,7 @@ Despite its broad applicability, CA becomes computationally prohibitive for larg
 
 As the data matrix grows beyond memory, an out-of-core (OOC) implementation — loading only subsets of the data from disk on demand — is desirable. Sparse storage of non-zero entries is additionally advantageous. A CA implementation that supports both is therefore highly desirable (Figure 1).
 
-Similar discussions have been made in the context of PCA and Non-negative Matrix Factorization (NMF), and we have independently developed Julia packages \texttt{OnlinePCA.jl} [@onlinepcajljoss; @onlinepcajl] and \texttt{OnlineNMF.jl} [@onlinenmfjl]. \texttt{OnlineCA.jl} is a spin-off version of these, implementing CA.
+\texttt{OnlineCA.jl} carries the out-of-core, sparse design used by our earlier \texttt{OnlinePCA.jl} [@onlinepcajljoss; @onlinepcajl] and \texttt{OnlineNMF.jl} [@onlinenmfjl] over to CA.
 
 The standardized residual matrix for CA is
 
@@ -193,5 +193,9 @@ There are various implementations of CA / MCA [@cajl; @factominer; @vegan; @prin
 | \texttt{corral}            | R      | No  | dgCMatrix | No  |
 | \texttt{singlet}           | R      | No  | dgCMatrix | No  |
 | \texttt{OnlineCA.jl}       | Julia  | Yes | MM/BinCOO | Yes |
+
+# AI usage disclosure
+
+Anthropic's Claude (Opus 4.6 and 4.7, accessed through the Claude Code CLI) assisted with drafting code, tests, docstrings, and prose across \texttt{src/}, \texttt{test/}, \texttt{paper/}, \texttt{README.md}, and \texttt{docs/}, including the phased refactoring to a NamedTuple result, RNG / seed threading, \texttt{Float32} support, MCA with the Benzécri / Greenacre correction, and supplementary projection. The author reviewed, edited, validated, and tested every AI-assisted output, and made all core design decisions — the implicit-operator decomposition, API contract, MCA's indicator-matrix route, and the output schema.
 
 # References
