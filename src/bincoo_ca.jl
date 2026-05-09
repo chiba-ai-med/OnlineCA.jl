@@ -29,6 +29,7 @@ function bincoo_ca(;
     chunksize::Number=0,
     rng::AbstractRNG=default_rng(),
     seed::Union{Nothing,Integer}=nothing,
+    T::Type=Float64,
 )
     # Initial Setting
     N, M = Int64.(nm(input))
@@ -59,7 +60,7 @@ function bincoo_ca(;
 
     # Compute CA using randomized SVD
     eff_rng = _make_rng(rng, seed)
-    out = ca_rsvd_bincoo(input, N, M, dim, noversamples, niter, chunksize, rowsums, colsums, total, eff_rng)
+    out = ca_rsvd_bincoo(input, N, M, dim, noversamples, niter, chunksize, rowsums, colsums, total, eff_rng, T)
 
     # Output
     if outdir isa String
@@ -132,14 +133,13 @@ end
 
 # Implicit S * Omega (bincoo)
 function implicit_S_times_Omega_bincoo(input, N, M, chunksize, rowsums, colsums, total, Omega)
+    T = eltype(Omega)
     l = size(Omega, 2)
-    Y = zeros(Float64, N, l)
-    inv_sqrt_colsums = zeros(Float64, M)
-    for j in 1:M
-        inv_sqrt_colsums[j] = colsums[j] > 0 ? 1.0 / sqrt(colsums[j] / total) : 0.0
-    end
-    DcInvSqrt_Omega = Diagonal(inv_sqrt_colsums) * Omega
-    cp = colsums ./ total
+    Y = zeros(T, N, l)
+    inv_sqrt_colsums   = _inv_sqrt_mass(T, colsums, total)
+    inv_sqrt_rowsums   = _inv_sqrt_mass(T, rowsums, total)
+    DcInvSqrt_Omega    = Diagonal(inv_sqrt_colsums) * Omega
+    cp                 = T.(colsums ./ total)
     cp_DcInvSqrt_Omega = cp' * DcInvSqrt_Omega
 
     open(input) do file
@@ -152,12 +152,13 @@ function implicit_S_times_Omega_bincoo(input, N, M, chunksize, rowsums, colsums,
         n = 1
         while n <= N
             X_chunk, batch_size = read_bincoo_chunk!(stream, N, M, n, chunksize, overflow_buf)
-            term1 = Matrix(X_chunk * DcInvSqrt_Omega) ./ total
+            term1 = Matrix(X_chunk * DcInvSqrt_Omega) ./ T(total)
             for i in 1:batch_size
-                rp_i = rowsums[n + i - 1] / total
-                inv_sqrt_ri = rowsums[n + i - 1] > 0 ? 1.0 / sqrt(rowsums[n + i - 1] / total) : 0.0
+                global_i = n + i - 1
+                rp_i = T(rowsums[global_i] / total)
+                s    = inv_sqrt_rowsums[global_i]
                 for k in 1:l
-                    Y[n + i - 1, k] = inv_sqrt_ri * (term1[i, k] - rp_i * cp_DcInvSqrt_Omega[k])
+                    Y[global_i, k] = s * (term1[i, k] - rp_i * cp_DcInvSqrt_Omega[k])
                 end
             end
             n += batch_size
@@ -169,18 +170,20 @@ end
 
 # Implicit S' * Q (bincoo)
 function implicit_St_times_Q_bincoo(input, N, M, chunksize, rowsums, colsums, total, Q)
+    T = eltype(Q)
     l = size(Q, 2)
-    DrInvSqrt_Q = zeros(Float64, N, l)
+    inv_sqrt_rowsums = _inv_sqrt_mass(T, rowsums, total)
+    DrInvSqrt_Q = zeros(T, N, l)
     for i in 1:N
-        inv_sqrt_ri = rowsums[i] > 0 ? 1.0 / sqrt(rowsums[i] / total) : 0.0
+        s = inv_sqrt_rowsums[i]
         for k in 1:l
-            DrInvSqrt_Q[i, k] = inv_sqrt_ri * Q[i, k]
+            DrInvSqrt_Q[i, k] = s * Q[i, k]
         end
     end
-    rp = rowsums ./ total
+    rp             = T.(rowsums ./ total)
     rp_DrInvSqrt_Q = rp' * DrInvSqrt_Q
 
-    AtQ = zeros(Float64, M, l)
+    AtQ = zeros(T, M, l)
     open(input) do file
         stream = ZstdDecompressorStream(file)
         tmpN = zeros(UInt32, 1)
@@ -197,24 +200,26 @@ function implicit_St_times_Q_bincoo(input, N, M, chunksize, rowsums, colsums, to
         end
         close(stream)
     end
-    result = zeros(Float64, M, l)
-    cp = colsums ./ total
+    inv_sqrt_colsums = _inv_sqrt_mass(T, colsums, total)
+    cp = T.(colsums ./ total)
+    result = zeros(T, M, l)
     for j in 1:M
-        inv_sqrt_cj = colsums[j] > 0 ? 1.0 / sqrt(colsums[j] / total) : 0.0
+        s = inv_sqrt_colsums[j]
         for k in 1:l
-            result[j, k] = inv_sqrt_cj * (AtQ[j, k] / total - cp[j] * rp_DrInvSqrt_Q[k])
+            result[j, k] = s * (AtQ[j, k] / T(total) - cp[j] * rp_DrInvSqrt_Q[k])
         end
     end
     return result
 end
 
 # Randomized SVD for CA (bincoo)
-function ca_rsvd_bincoo(input, N, M, dim, noversamples, niter, chunksize, rowsums, colsums, total, rng::AbstractRNG=default_rng())
+function ca_rsvd_bincoo(input, N, M, dim, noversamples, niter, chunksize, rowsums, colsums, total,
+                        rng::AbstractRNG=default_rng(), T::Type=Float64)
     l = dim + noversamples
     @assert 0 < dim <= l <= min(N, M)
 
     println("Random Projection: Y = S * Omega")
-    Omega = rand(rng, Float64, M, l)
+    Omega = rand(rng, T, M, l)
     Y = implicit_S_times_Omega_bincoo(input, N, M, chunksize, rowsums, colsums, total, Omega)
 
     println("QR factorization: Q = qr(Y)")

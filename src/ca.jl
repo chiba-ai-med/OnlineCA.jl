@@ -35,6 +35,7 @@ function ca(;
     chunksize::Number=0,
     rng::AbstractRNG=default_rng(),
     seed::Union{Nothing,Integer}=nothing,
+    T::Type=Float64,
 )
     # Initial Setting
     N, M = Int64.(nm(input))
@@ -65,7 +66,7 @@ function ca(;
 
     # Compute CA using randomized SVD
     eff_rng = _make_rng(rng, seed)
-    out = ca_rsvd_dense(input, N, M, dim, noversamples, niter, chunksize, rowsums, colsums, total, eff_rng)
+    out = ca_rsvd_dense(input, N, M, dim, noversamples, niter, chunksize, rowsums, colsums, total, eff_rng, T)
 
     # Output
     if outdir isa String
@@ -110,17 +111,13 @@ end
 # Implicit S * Ω: compute D_r^{-1/2} (X/(n) - r_p c_p') D_c^{-1/2} * Ω by streaming
 # = D_r^{-1/2} [ X * (D_c^{-1/2} Ω) / n  -  r_p * (c_p' D_c^{-1/2} Ω) ]
 function implicit_S_times_Omega_dense(input, N, M, chunksize, rowsums, colsums, total, Omega)
+    T = eltype(Omega)
     l = size(Omega, 2)
-    Y = zeros(Float64, N, l)
-    # Precompute: D_c^{-1/2} * Omega (M × l)
-    inv_sqrt_colsums = zeros(Float64, M)
-    for j in 1:M
-        inv_sqrt_colsums[j] = colsums[j] > 0 ? 1.0 / sqrt(colsums[j] / total) : 0.0
-    end
-    DcInvSqrt_Omega = Diagonal(inv_sqrt_colsums) * Omega  # M × l
-    # Precompute: c_p' * D_c^{-1/2} * Omega (1 × l)
-    cp = colsums ./ total  # M
-    cp_DcInvSqrt_Omega = cp' * DcInvSqrt_Omega  # 1 × l
+    Y = zeros(T, N, l)
+    inv_sqrt_colsums = _inv_sqrt_mass(T, colsums, total)
+    DcInvSqrt_Omega  = Diagonal(inv_sqrt_colsums) * Omega          # M × l
+    cp                 = T.(colsums ./ total)                       # M
+    cp_DcInvSqrt_Omega = cp' * DcInvSqrt_Omega                      # 1 × l
 
     tmpN = zeros(UInt32, 1)
     tmpM = zeros(UInt32, 1)
@@ -133,25 +130,23 @@ function implicit_S_times_Omega_dense(input, N, M, chunksize, rowsums, colsums, 
             batch_size = min(chunksize, N - n + 1)
             buffer = zeros(UInt32, batch_size * M)
             read!(stream, buffer)
-            X_chunk = Float64.(permutedims(reshape(buffer, M, batch_size)))  # batch_size × M
-            # X_chunk * DcInvSqrt_Omega / total
-            term1 = X_chunk * DcInvSqrt_Omega ./ total  # batch_size × l
-            # r_p[n:n+bs-1] * (c_p' D_c^{-1/2} Omega)
+            X_chunk = T.(permutedims(reshape(buffer, M, batch_size)))   # batch_size × M
+            term1   = X_chunk * DcInvSqrt_Omega ./ T(total)             # batch_size × l
             for i in 1:batch_size
-                rp_i = rowsums[n + i - 1] / total
+                rp_i = T(rowsums[n + i - 1] / total)
                 for k in 1:l
-                    Y[n + i - 1, k] = (term1[i, k] - rp_i * cp_DcInvSqrt_Omega[k])
+                    Y[n + i - 1, k] = term1[i, k] - rp_i * cp_DcInvSqrt_Omega[k]
                 end
             end
             n += batch_size
         end
         close(stream)
     end
-    # Multiply by D_r^{-1/2}
+    inv_sqrt_rowsums = _inv_sqrt_mass(T, rowsums, total)
     for i in 1:N
-        inv_sqrt_ri = rowsums[i] > 0 ? 1.0 / sqrt(rowsums[i] / total) : 0.0
+        s = inv_sqrt_rowsums[i]
         for k in 1:l
-            Y[i, k] *= inv_sqrt_ri
+            Y[i, k] *= s
         end
     end
     return Y
@@ -160,21 +155,20 @@ end
 # Implicit S' * Q: compute D_c^{-1/2} (X'/(n) - c_p r_p') D_r^{-1/2} * Q by streaming
 # = D_c^{-1/2} [ X' * (D_r^{-1/2} Q) / n  -  c_p * (r_p' D_r^{-1/2} Q) ]
 function implicit_St_times_Q_dense(input, N, M, chunksize, rowsums, colsums, total, Q)
+    T = eltype(Q)
     l = size(Q, 2)
-    # Precompute: D_r^{-1/2} * Q (N × l)
-    DrInvSqrt_Q = zeros(Float64, N, l)
+    inv_sqrt_rowsums = _inv_sqrt_mass(T, rowsums, total)
+    DrInvSqrt_Q = zeros(T, N, l)
     for i in 1:N
-        inv_sqrt_ri = rowsums[i] > 0 ? 1.0 / sqrt(rowsums[i] / total) : 0.0
+        s = inv_sqrt_rowsums[i]
         for k in 1:l
-            DrInvSqrt_Q[i, k] = inv_sqrt_ri * Q[i, k]
+            DrInvSqrt_Q[i, k] = s * Q[i, k]
         end
     end
-    # Precompute: r_p' * D_r^{-1/2} * Q (1 × l)
-    rp = rowsums ./ total  # N
-    rp_DrInvSqrt_Q = rp' * DrInvSqrt_Q  # 1 × l
+    rp             = T.(rowsums ./ total)
+    rp_DrInvSqrt_Q = rp' * DrInvSqrt_Q
 
-    # Accumulate X' * DrInvSqrt_Q by streaming
-    AtQ = zeros(Float64, M, l)
+    AtQ = zeros(T, M, l)
     tmpN = zeros(UInt32, 1)
     tmpM = zeros(UInt32, 1)
     open(input) do file
@@ -186,33 +180,34 @@ function implicit_St_times_Q_dense(input, N, M, chunksize, rowsums, colsums, tot
             batch_size = min(chunksize, N - n + 1)
             buffer = zeros(UInt32, batch_size * M)
             read!(stream, buffer)
-            X_chunk = Float64.(permutedims(reshape(buffer, M, batch_size)))  # batch_size × M
-            Q_chunk = @view DrInvSqrt_Q[n:n+batch_size-1, :]  # batch_size × l
-            AtQ .+= X_chunk' * Q_chunk  # M × l
+            X_chunk = T.(permutedims(reshape(buffer, M, batch_size)))
+            Q_chunk = @view DrInvSqrt_Q[n:n+batch_size-1, :]
+            AtQ .+= X_chunk' * Q_chunk
             n += batch_size
         end
         close(stream)
     end
-    # Result = D_c^{-1/2} [ AtQ / n  -  c_p * rp_DrInvSqrt_Q ]
-    result = zeros(Float64, M, l)
-    cp = colsums ./ total
+    inv_sqrt_colsums = _inv_sqrt_mass(T, colsums, total)
+    cp = T.(colsums ./ total)
+    result = zeros(T, M, l)
     for j in 1:M
-        inv_sqrt_cj = colsums[j] > 0 ? 1.0 / sqrt(colsums[j] / total) : 0.0
+        s = inv_sqrt_colsums[j]
         for k in 1:l
-            result[j, k] = inv_sqrt_cj * (AtQ[j, k] / total - cp[j] * rp_DrInvSqrt_Q[k])
+            result[j, k] = s * (AtQ[j, k] / T(total) - cp[j] * rp_DrInvSqrt_Q[k])
         end
     end
     return result
 end
 
 # Randomized SVD for CA (dense)
-function ca_rsvd_dense(input, N, M, dim, noversamples, niter, chunksize, rowsums, colsums, total, rng::AbstractRNG=default_rng())
+function ca_rsvd_dense(input, N, M, dim, noversamples, niter, chunksize, rowsums, colsums, total,
+                       rng::AbstractRNG=default_rng(), T::Type=Float64)
     l = dim + noversamples
     @assert 0 < dim <= l <= min(N, M)
 
     # Step 1: Random projection Y = S * Omega
     println("Random Projection: Y = S * Omega")
-    Omega = rand(rng, Float64, M, l)
+    Omega = rand(rng, T, M, l)
     Y = implicit_S_times_Omega_dense(input, N, M, chunksize, rowsums, colsums, total, Omega)
 
     # Step 2: QR factorization

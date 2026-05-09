@@ -29,32 +29,32 @@ _make_rng(::AbstractRNG, seed::Integer) = MersenneTwister(seed)
 # Defensive 1/sqrt: returns 0 for non-positive masses (Phase 4 will filter).
 @inline _safe_inv_sqrt(x::Real) = x > 0 ? 1 / sqrt(x) : zero(x)
 
-"Per-row inverse-sqrt mass (length N)."
-function _inv_sqrt_mass(sums::AbstractVector, total::Real)
-    out = similar(sums, Float64)
+"Per-row inverse-sqrt mass in element type `T` (length N)."
+function _inv_sqrt_mass(::Type{T}, sums::AbstractVector, total::Real) where T
+    out = Vector{T}(undef, length(sums))
     @inbounds for i in eachindex(sums)
         m = sums[i] / total
-        out[i] = _safe_inv_sqrt(m)
+        out[i] = m > 0 ? T(1 / sqrt(m)) : zero(T)
     end
     return out
 end
 
-"Standard coordinates: D^{-1/2} * U_or_V (size N×dim or M×dim)."
+"Standard coordinates: D^{-1/2} * U_or_V (size N×dim or M×dim). Preserves eltype(U)."
 function _standard_coords(U::AbstractMatrix, inv_sqrt_mass::AbstractVector)
     N, k = size(U)
     @assert length(inv_sqrt_mass) == N
-    out = similar(U, Float64)
+    out = similar(U)
     @inbounds for j in 1:k, i in 1:N
         out[i, j] = inv_sqrt_mass[i] * U[i, j]
     end
     return out
 end
 
-"Principal coordinates: standard .* sigma' (broadcasting σ along columns)."
+"Principal coordinates: standard .* sigma' (broadcasting σ along columns). Preserves eltype."
 function _principal_coords(std::AbstractMatrix, sigma::AbstractVector)
     N, k = size(std)
     @assert length(sigma) == k
-    out = similar(std, Float64)
+    out = similar(std)
     @inbounds for j in 1:k, i in 1:N
         out[i, j] = std[i, j] * sigma[j]
     end
@@ -70,18 +70,18 @@ end
 Squared cosines of the angle between row/col profile and each axis.
    cos²_{ik} = (σ_k * U_{ik})^2 / dist2_i
 
-`dist2` is the per-row (or per-col) sum of S^2 entries, i.e. the row's total
-squared distance to the centroid in the standardized residual space. Zero
-masses propagate to cos²=0 (kept defensive; Phase 4 cleans up systematically).
+`dist2` is the per-row (or per-col) sum of S^2 entries. Zero masses propagate
+to cos²=0. Preserves eltype(U).
 """
 function _cos2(U::AbstractMatrix, sigma::AbstractVector, dist2::AbstractVector)
     N, k = size(U)
     @assert length(sigma) == k
     @assert length(dist2) == N
-    out = similar(U, Float64)
+    T = eltype(U)
+    out = similar(U)
     @inbounds for j in 1:k, i in 1:N
         d = dist2[i]
-        out[i, j] = d > 0 ? (sigma[j] * U[i, j])^2 / d : zero(Float64)
+        out[i, j] = d > 0 ? T((sigma[j] * U[i, j])^2 / d) : zero(T)
     end
     return out
 end
@@ -95,10 +95,12 @@ function _build_result(U_dim, V_dim, sigma_dim,
                        rowsums, colsums, total,
                        total_inertia, rowdist2, coldist2)
 
-    inv_sqrt_rowmass = _inv_sqrt_mass(rowsums, total)
-    inv_sqrt_colmass = _inv_sqrt_mass(colsums, total)
+    T = eltype(U_dim)
 
-    rowmass    = rowsums ./ total
+    inv_sqrt_rowmass = _inv_sqrt_mass(T, rowsums, total)
+    inv_sqrt_colmass = _inv_sqrt_mass(T, colsums, total)
+
+    rowmass    = rowsums ./ total                 # Float64 marginal probabilities
     colmass    = colsums ./ total
 
     rowstd     = _standard_coords(U_dim, inv_sqrt_rowmass)
