@@ -10,13 +10,14 @@ function checkNaN(X::AbstractArray)
     end
 end
 
-# Output the result of CA
-function output(outdir::AbstractString, out::Tuple)
-    write_csv(joinpath(outdir, "Row_coordinates.csv"), out[1])
-    write_csv(joinpath(outdir, "Col_coordinates.csv"), out[2])
-    write_csv(joinpath(outdir, "Singular_values.csv"), out[3])
-    write_csv(joinpath(outdir, "Inertia.csv"), out[4])
-    write_csv(joinpath(outdir, "Total_inertia.csv"), out[5])
+# Output the result of CA. Accepts a NamedTuple (preferred) or Tuple
+# (legacy callers). Indexed access is used so both shapes work.
+function output(outdir::AbstractString, out)
+    write_csv(joinpath(outdir, "Row_coordinates.csv"),  out[1])
+    write_csv(joinpath(outdir, "Col_coordinates.csv"),  out[2])
+    write_csv(joinpath(outdir, "Singular_values.csv"),  out[3])
+    write_csv(joinpath(outdir, "Inertia.csv"),          out[4])
+    write_csv(joinpath(outdir, "Total_inertia.csv"),    out[5])
 end
 
 write_csv(filename::AbstractString, data) = writedlm(filename, data, ',')

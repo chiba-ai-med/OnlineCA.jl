@@ -60,6 +60,16 @@ for (name, input) in contract_inputs
     collected = collect(out)
     @test length(collected) == 5
 
+    # 4b. NamedTuple field access (Phase 2 contract — additive)
+    @test out isa NamedTuple
+    @test out.rowcoord       === F
+    @test out.colcoord       === G
+    @test out.sigma          === sigma
+    @test out.inertia        === inertia
+    @test out.total_inertia  === total_iner
+    @test propertynames(out) == (:rowcoord, :colcoord, :sigma,
+                                 :inertia, :total_inertia)
+
     # 5. Shapes
     @test size(F, 2) == 2
     @test size(G, 2) == 2

@@ -264,7 +264,8 @@ function ca_rsvd_dense(input, N, M, dim, noversamples, niter, chunksize, rowsums
     total_inertia = compute_total_inertia_dense(input, N, M, chunksize, rowsums, colsums, total)
     inertia = sigma_dim .^ 2
 
-    return (F, G, sigma_dim, inertia, total_inertia)
+    return (rowcoord=F, colcoord=G, sigma=sigma_dim, inertia=inertia,
+            total_inertia=total_inertia)
 end
 
 # Compute total inertia = sum of all (S_ij)^2 = chi-squared / n

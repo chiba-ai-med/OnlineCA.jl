@@ -256,7 +256,8 @@ function ca_rsvd_sparse(input, N, M, dim, noversamples, niter, chunksize, rowsum
     total_inertia = compute_total_inertia_sparse(input, N, M, rowsums, colsums, total)
     inertia = sigma_dim .^ 2
 
-    return (F, G_coord, sigma_dim, inertia, total_inertia)
+    return (rowcoord=F, colcoord=G_coord, sigma=sigma_dim, inertia=inertia,
+            total_inertia=total_inertia)
 end
 
 # Compute total inertia (sparse)
