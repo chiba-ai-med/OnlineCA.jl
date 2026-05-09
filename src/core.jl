@@ -106,6 +106,13 @@ function _build_result(U_dim, V_dim, sigma_dim,
 
     inertia    = sigma_dim .^ 2
 
+    # Phase 4: indices of rows / columns with positive mass. Zero-mass rows
+    # and columns flow through the pipeline with all-zero coordinates and
+    # zero contributions; users who want to drop them entirely can index
+    # into `out.rowcoord[out.valid_rows, :]`.
+    valid_rows = findall(>(0), rowsums)
+    valid_cols = findall(>(0), colsums)
+
     # First 5 fields preserve Phase 1/2 positional contract.
     return (rowcoord       = rowcoord,
             colcoord       = colcoord,
@@ -119,5 +126,7 @@ function _build_result(U_dim, V_dim, sigma_dim,
             rowcontrib     = rowcontrib,
             colcontrib     = colcontrib,
             rowcos2        = rowcos2,
-            colcos2        = colcos2)
+            colcos2        = colcos2,
+            valid_rows     = valid_rows,
+            valid_cols     = valid_cols)
 end

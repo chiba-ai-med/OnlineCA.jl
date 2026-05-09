@@ -115,6 +115,7 @@ println("Running all tests...")
 
 include("test_api_contract.jl")
 include("test_outputs.jl")
+include("test_zero_rowcol.jl")
 include("test_ca.jl")
 include("test_sparse_ca.jl")
 include("test_bincoo_ca.jl")
