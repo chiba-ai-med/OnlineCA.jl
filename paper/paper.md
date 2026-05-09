@@ -23,7 +23,7 @@ bibliography: paper.bib
 
 Correspondence Analysis (CA) is a multivariate technique for the exploratory analysis of contingency tables [@hill1974; @greenacre2017]. Like Principal Component Analysis (PCA), CA decomposes a data matrix into low-dimensional row and column scores, but it operates on a standardized residual matrix that compares observed counts with the expectation under independence. CA has been widely applied across diverse fields including ecology [@terbraak], linguistics and text analysis [@greenacre2017], market research [@greenacre2017], and more recently single-cell omics [@corral].
 
-Despite its broad applicability, CA becomes computationally prohibitive for large data matrices, since it requires the singular value decomposition (SVD) of an N $\times$ M matrix. In particular, recent advances in single-cell omics have led to datasets with millions of cells, for which standard CA implementations often fail to scale. To meet this requirement, I present \texttt{OnlineCA.jl}, a Julia package for out-of-core and sparse CA (\url{https://github.com/chiba-ai-med/OnlineCA.jl}).
+Despite its broad applicability, CA becomes computationally prohibitive for large data matrices, since it requires the singular value decomposition (SVD) of an N $\times$ M matrix. In particular, recent advances in single-cell omics have led to datasets with millions of cells, for which standard CA implementations often fail to scale. To meet this requirement, I present \texttt{OnlineCA.jl}, a Julia package for out-of-core and sparse CA (\url{https://github.com/chiba-ai-med/OnlineCA.jl}). The same out-of-core machinery is reused to support Multiple Correspondence Analysis (MCA) on large categorical tables, including the standard Benzécri [@benzecri1979] and Greenacre [@greenacre2017] eigenvalue corrections.
 
 # Statement of need
 
@@ -154,22 +154,43 @@ subplots(out_sparse_ca, group)
 
 ![Output of sparse_ca against binarized MM format.\label{fig:ca3}](sparse_ca.png){ width=100% }
 
+## Multiple Correspondence Analysis (MCA)
+
+MCA generalizes CA to a categorical table with $q$ variables by applying CA to its $N \times M$ complete disjunctive (indicator) matrix, where each row has exactly $q$ ones. \texttt{OnlineCA.jl} materializes the indicator on disk in BinCOO format and reuses \texttt{bincoo\_ca}, so all out-of-core, sparse, and randomized-SVD machinery applies unchanged. The CA spectrum on an indicator matrix is artificially inflated; the standard per-axis correction
+
+$$
+\lambda_k^{*} = \left( \frac{q}{q-1} \left( \lambda_k - \frac{1}{q} \right) \right)^2 \quad \text{if } \lambda_k > \frac{1}{q}, \text{ else } 0
+$$
+
+is selectable through the \texttt{correction} keyword (Benzécri [@benzecri1979] vs. Greenacre [@greenacre2017]).
+
+```julia
+# 200 observations × 4 categorical variables, each with 3 levels
+table = rand(1:3, 200, 4)
+
+out_mca = mca(table; dim=3, correction=:benzecri,
+              var_names=["age", "sex", "region", "occupation"])
+# out_mca.inertia_adjusted, out_mca.total_inertia_adjusted, ...
+```
+
 For more details, including the BinCOO variant for binary contingency tables, see the README.md of \texttt{OnlineCA.jl} at \url{https://github.com/chiba-ai-med/OnlineCA.jl}.
 
 # Related work
 
-There are various implementations of CA [@cajl; @factominer; @vegan; @prince; @mca] and some of them support sparse data formats [@corral; @singlet], but \texttt{OnlineCA.jl} is the only tool that supports both OOC computation and language-agnostic sparse formats (MM and BinCOO), enabling seamless integration with external data pipelines.
+There are various implementations of CA / MCA [@cajl; @factominer; @vegan; @prince; @mca] and some of them support sparse data formats [@corral; @singlet], but \texttt{OnlineCA.jl} is the only tool that supports both OOC computation and language-agnostic sparse formats (MM and BinCOO), enabling seamless integration with external data pipelines.
 
-| Function Name | Language | OOC | Sparse Format |
-|:------ | :----: | :----: | :----: |
-| \texttt{MASS::corresp} | R | No | - |
-| \texttt{ca::ca} | R | No | - |
-| \texttt{FactoMineR::CA} | R | No | - |
-| \texttt{vegan::cca} | R | No | - |
-| \texttt{prince.CA} | Python | No | - |
-| \texttt{mca} | Python | No | - |
-| \texttt{corral} | R | No | dgCMatrix |
-| \texttt{singlet} | R | No | dgCMatrix |
-| \texttt{OnlineCA.jl} | Julia | Yes | MM/BinCOO |
+| Function Name | Language | OOC | Sparse Format | MCA |
+|:------ | :----: | :----: | :----: | :----: |
+| \texttt{MASS::corresp}     | R      | No  | -         | No  |
+| \texttt{ca::ca}            | R      | No  | -         | -   |
+| \texttt{ca::mjca}          | R      | No  | -         | Yes |
+| \texttt{FactoMineR::CA}    | R      | No  | -         | -   |
+| \texttt{FactoMineR::MCA}   | R      | No  | -         | Yes |
+| \texttt{vegan::cca}        | R      | No  | -         | No  |
+| \texttt{prince.CA/MCA}     | Python | No  | -         | Yes |
+| \texttt{mca}               | Python | No  | -         | Yes |
+| \texttt{corral}            | R      | No  | dgCMatrix | No  |
+| \texttt{singlet}           | R      | No  | dgCMatrix | No  |
+| \texttt{OnlineCA.jl}       | Julia  | Yes | MM/BinCOO | Yes |
 
 # References
