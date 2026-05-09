@@ -242,37 +242,28 @@ function ca_rsvd_sparse(input, N, M, dim, noversamples, niter, chunksize, rowsum
     U_dim = U_svd[:, 1:dim]
     V_dim = Vt[:, 1:dim]
 
-    F = zeros(Float64, N, dim)
-    G_coord = zeros(Float64, M, dim)
-    for k in 1:dim
-        for i in 1:N
-            F[i, k] = sigma_dim[k] * U_dim[i, k]
-        end
-        for j in 1:M
-            G_coord[j, k] = sigma_dim[k] * V_dim[j, k]
-        end
-    end
+    total_inertia, rowdist2, coldist2 =
+        compute_inertias_sparse(input, N, M, rowsums, colsums, total)
 
-    total_inertia = compute_total_inertia_sparse(input, N, M, rowsums, colsums, total)
-    inertia = sigma_dim .^ 2
-
-    return (rowcoord=F, colcoord=G_coord, sigma=sigma_dim, inertia=inertia,
-            total_inertia=total_inertia)
+    return _build_result(U_dim, V_dim, sigma_dim,
+                         rowsums, colsums, total,
+                         total_inertia, rowdist2, coldist2)
 end
 
-# Compute total inertia (sparse)
-function compute_total_inertia_sparse(input, N, M, rowsums, colsums, total)
-    # Total inertia = sum_ij (x_ij - e_ij)^2 / e_ij / n
-    # where e_ij = r_i * c_j / n
-    # For sparse data: non-zero entries contribute (x_ij - e_ij)^2 / e_ij
-    # Zero entries contribute e_ij (since (0 - e_ij)^2 / e_ij = e_ij)
-    # Total = [sum over nonzero: (x_ij - e_ij)^2 / e_ij] + [sum over zero: e_ij]
-    # = [sum over nonzero: (x_ij - e_ij)^2 / e_ij] + [sum_all e_ij - sum_nonzero e_ij]
-    # sum_all e_ij = sum_i r_i * sum_j c_j / n = n^2 / n = n
-    # So Total = [sum over nonzero: (x_ij - e_ij)^2 / e_ij - e_ij] + n
+# Compute total inertia along with marginal S_ij^2 sums (sparse).
+#
+# For sparse data, the formula factors into nonzero and zero contributions:
+#   Σ_ij S_ij^2 = Σ_nonzero (x-e)^2/e + Σ_zero e
+# Per-row/per-col marginals are accumulated similarly: for the zero-cell part
+# of row i we add (r_i_total - sum_e_in_row_nonzero) once at the end.
+function compute_inertias_sparse(input, N, M, rowsums, colsums, total)
+    chi2_nonzero          = 0.0
+    sum_e_nonzero         = 0.0
+    rowdist2              = zeros(Float64, N)   # in chi^2 units, divided by total at end
+    coldist2              = zeros(Float64, M)
+    rowexp_nonzero        = zeros(Float64, N)   # Σ e_ij over nonzero cells per row
+    colexp_nonzero        = zeros(Float64, M)
 
-    chi2_contribution = 0.0
-    sum_expected_nonzero = 0.0
     open(input) do file
         stream = ZstdDecompressorStream(file)
         tmpN = zeros(UInt32, 1)
@@ -286,14 +277,34 @@ function compute_total_inertia_sparse(input, N, M, rowsums, colsums, total)
             x = Float64(val)
             e = rowsums[row] * colsums[col] / total
             if e > 0
-                chi2_contribution += (x - e)^2 / e
-                sum_expected_nonzero += e
+                chi2_cell             = (x - e)^2 / e
+                chi2_nonzero         += chi2_cell
+                sum_e_nonzero        += e
+                rowdist2[row]        += chi2_cell
+                coldist2[col]        += chi2_cell
+                rowexp_nonzero[row]  += e
+                colexp_nonzero[col]  += e
             end
         end
         close(stream)
     end
-    # Zero entries contribute: (sum_all_expected - sum_nonzero_expected)
-    # sum_all_expected = total
-    total_chi2 = chi2_contribution + (total - sum_expected_nonzero)
-    return total_chi2 / total
+
+    # Zero-cell contribution: each cell (i, j) with e_ij > 0 but x_ij == 0
+    # contributes (0 - e)^2 / e = e. Summing over zero cells in row i gives
+    #   Σ_{j ∈ zeros(i)} e_ij = (sum of e over all j) - (sum over nonzero j)
+    #                        = rowsums[i] - rowexp_nonzero[i]
+    # because Σ_j e_ij = (rowsums[i] / total) * Σ_j colsums[j] = rowsums[i].
+    @inbounds for i in 1:N
+        rowdist2[i] += rowsums[i] - rowexp_nonzero[i]
+    end
+    @inbounds for j in 1:M
+        coldist2[j] += colsums[j] - colexp_nonzero[j]
+    end
+
+    # Total: chi2_nonzero + Σ_zero e = chi2_nonzero + (total - sum_e_nonzero)
+    total_chi2 = chi2_nonzero + (total - sum_e_nonzero)
+
+    rowdist2 ./= total
+    coldist2 ./= total
+    return total_chi2 / total, rowdist2, coldist2
 end

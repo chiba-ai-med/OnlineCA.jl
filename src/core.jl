@@ -1,0 +1,123 @@
+"""
+Common, format-agnostic helpers shared by `ca`, `sparse_ca`, `bincoo_ca`.
+
+The math (Greenacre 2017, "Correspondence Analysis in Practice"):
+
+S = D_r^{-1/2} (P - r_p c_p^T) D_c^{-1/2} = U Σ V^T  (SVD)
+
+  rowmass    : r_p              = rowsums  / total           (length N)
+  colmass    : c_p              = colsums  / total           (length M)
+  rowstd     : D_r^{-1/2} U                                  (N × dim)
+  colstd     : D_c^{-1/2} V                                  (M × dim)
+  rowcoord   : D_r^{-1/2} U Σ   = rowstd .* σ'               (N × dim)
+  colcoord   : D_c^{-1/2} V Σ   = colstd .* σ'               (M × dim)
+  rowcontrib : U .^ 2           ; columns sum to 1            (N × dim)
+  colcontrib : V .^ 2           ; columns sum to 1            (M × dim)
+  rowcos2    : (σ_k u_ik)^2 / Σ_j S_ij^2                     (N × dim)
+  colcos2    : (σ_k v_jk)^2 / Σ_i S_ij^2                     (M × dim)
+"""
+
+# Defensive 1/sqrt: returns 0 for non-positive masses (Phase 4 will filter).
+@inline _safe_inv_sqrt(x::Real) = x > 0 ? 1 / sqrt(x) : zero(x)
+
+"Per-row inverse-sqrt mass (length N)."
+function _inv_sqrt_mass(sums::AbstractVector, total::Real)
+    out = similar(sums, Float64)
+    @inbounds for i in eachindex(sums)
+        m = sums[i] / total
+        out[i] = _safe_inv_sqrt(m)
+    end
+    return out
+end
+
+"Standard coordinates: D^{-1/2} * U_or_V (size N×dim or M×dim)."
+function _standard_coords(U::AbstractMatrix, inv_sqrt_mass::AbstractVector)
+    N, k = size(U)
+    @assert length(inv_sqrt_mass) == N
+    out = similar(U, Float64)
+    @inbounds for j in 1:k, i in 1:N
+        out[i, j] = inv_sqrt_mass[i] * U[i, j]
+    end
+    return out
+end
+
+"Principal coordinates: standard .* sigma' (broadcasting σ along columns)."
+function _principal_coords(std::AbstractMatrix, sigma::AbstractVector)
+    N, k = size(std)
+    @assert length(sigma) == k
+    out = similar(std, Float64)
+    @inbounds for j in 1:k, i in 1:N
+        out[i, j] = std[i, j] * sigma[j]
+    end
+    return out
+end
+
+"Row/column contributions: U.^2 (each column sums to 1 because U is orthonormal)."
+function _contributions(U::AbstractMatrix)
+    return U .^ 2
+end
+
+"""
+Squared cosines of the angle between row/col profile and each axis.
+   cos²_{ik} = (σ_k * U_{ik})^2 / dist2_i
+
+`dist2` is the per-row (or per-col) sum of S^2 entries, i.e. the row's total
+squared distance to the centroid in the standardized residual space. Zero
+masses propagate to cos²=0 (kept defensive; Phase 4 cleans up systematically).
+"""
+function _cos2(U::AbstractMatrix, sigma::AbstractVector, dist2::AbstractVector)
+    N, k = size(U)
+    @assert length(sigma) == k
+    @assert length(dist2) == N
+    out = similar(U, Float64)
+    @inbounds for j in 1:k, i in 1:N
+        d = dist2[i]
+        out[i, j] = d > 0 ? (sigma[j] * U[i, j])^2 / d : zero(Float64)
+    end
+    return out
+end
+
+"""
+Build the post-SVD output NamedTuple. Centralizing this guarantees identical
+field order across `ca` / `sparse_ca` / `bincoo_ca` so the API contract holds.
+The first 5 fields preserve the Phase 1/2 positional contract.
+"""
+function _build_result(U_dim, V_dim, sigma_dim,
+                       rowsums, colsums, total,
+                       total_inertia, rowdist2, coldist2)
+
+    inv_sqrt_rowmass = _inv_sqrt_mass(rowsums, total)
+    inv_sqrt_colmass = _inv_sqrt_mass(colsums, total)
+
+    rowmass    = rowsums ./ total
+    colmass    = colsums ./ total
+
+    rowstd     = _standard_coords(U_dim, inv_sqrt_rowmass)
+    colstd     = _standard_coords(V_dim, inv_sqrt_colmass)
+
+    rowcoord   = _principal_coords(rowstd, sigma_dim)
+    colcoord   = _principal_coords(colstd, sigma_dim)
+
+    rowcontrib = _contributions(U_dim)
+    colcontrib = _contributions(V_dim)
+
+    rowcos2    = _cos2(U_dim, sigma_dim, rowdist2)
+    colcos2    = _cos2(V_dim, sigma_dim, coldist2)
+
+    inertia    = sigma_dim .^ 2
+
+    # First 5 fields preserve Phase 1/2 positional contract.
+    return (rowcoord       = rowcoord,
+            colcoord       = colcoord,
+            sigma          = sigma_dim,
+            inertia        = inertia,
+            total_inertia  = total_inertia,
+            rowstd         = rowstd,
+            colstd         = colstd,
+            rowmass        = rowmass,
+            colmass        = colmass,
+            rowcontrib     = rowcontrib,
+            colcontrib     = colcontrib,
+            rowcos2        = rowcos2,
+            colcos2        = colcos2)
+end

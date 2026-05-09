@@ -33,8 +33,10 @@ for (name, input) in contract_inputs
     f = contract_funcs[name]
     out = f(input=input, dim=2, noversamples=10, niter=3, chunksize=100)
 
-    # 1. Length-5 collection
-    @test length(out) == 5
+    # 1. The first five fields preserve the legacy positional contract.
+    #    (Phase 3 may add fields; total length grows but order of the first
+    #    five is frozen.)
+    @test length(out) >= 5
 
     # 2. Integer indexing (Tuple- or NamedTuple-compatible)
     F           = out[1]
@@ -48,7 +50,8 @@ for (name, input) in contract_inputs
     @test inertia isa AbstractVector
     @test total_iner isa Real
 
-    # 3. Positional destructuring
+    # 3. Positional destructuring (5-LHS form keeps working even if more
+    #    fields are present.)
     a, b, c, d, e = out
     @test a === F
     @test b === G
@@ -56,19 +59,15 @@ for (name, input) in contract_inputs
     @test d === inertia
     @test e === total_iner
 
-    # 4. Iteration order matches positional order (length(collect(out)) == 5)
-    collected = collect(out)
-    @test length(collected) == 5
-
-    # 4b. NamedTuple field access (Phase 2 contract — additive)
+    # 4. NamedTuple field access (Phase 2 contract — additive)
     @test out isa NamedTuple
     @test out.rowcoord       === F
     @test out.colcoord       === G
     @test out.sigma          === sigma
     @test out.inertia        === inertia
     @test out.total_inertia  === total_iner
-    @test propertynames(out) == (:rowcoord, :colcoord, :sigma,
-                                 :inertia, :total_inertia)
+    @test propertynames(out)[1:5] == (:rowcoord, :colcoord, :sigma,
+                                      :inertia, :total_inertia)
 
     # 5. Shapes
     @test size(F, 2) == 2

@@ -245,34 +245,23 @@ function ca_rsvd_dense(input, N, M, dim, noversamples, niter, chunksize, rowsums
     U_dim = U_svd[:, 1:dim]
     V_dim = Vt[:, 1:dim]
 
-    # Compute CA coordinates
-    # Row coordinates: F = D_r^{-1/2} * U_dim * Diag(sigma_dim)
-    # But U_dim is already in the space of D_r^{-1/2} * ... so we just scale
-    # F_i = sigma_k * U_dim[i, k]  (standard coordinates * sigma = principal coordinates)
-    F = zeros(Float64, N, dim)
-    G = zeros(Float64, M, dim)
-    for k in 1:dim
-        for i in 1:N
-            F[i, k] = sigma_dim[k] * U_dim[i, k]
-        end
-        for j in 1:M
-            G[j, k] = sigma_dim[k] * V_dim[j, k]
-        end
-    end
+    # Marginal squared S entries are computed in the same OOC pass as total
+    # inertia; they are needed for cos² and would otherwise require an extra
+    # pass over the data.
+    total_inertia, rowdist2, coldist2 =
+        compute_inertias_dense(input, N, M, chunksize, rowsums, colsums, total)
 
-    # Inertia (explained by each dimension)
-    total_inertia = compute_total_inertia_dense(input, N, M, chunksize, rowsums, colsums, total)
-    inertia = sigma_dim .^ 2
-
-    return (rowcoord=F, colcoord=G, sigma=sigma_dim, inertia=inertia,
-            total_inertia=total_inertia)
+    return _build_result(U_dim, V_dim, sigma_dim,
+                         rowsums, colsums, total,
+                         total_inertia, rowdist2, coldist2)
 end
 
-# Compute total inertia = sum of all (S_ij)^2 = chi-squared / n
-# = sum_ij (x_ij / n - r_i * c_j / n^2)^2 / (r_i/n * c_j/n)
-# = sum_ij (x_ij - r_i * c_j / n)^2 / (r_i * c_j / n)  * (1/n)
-function compute_total_inertia_dense(input, N, M, chunksize, rowsums, colsums, total)
-    inertia = 0.0
+# Compute total inertia = Σ S_ij^2 (chi-squared / n) along with the per-row
+# and per-column sums of S_ij^2 (needed for cos²).
+function compute_inertias_dense(input, N, M, chunksize, rowsums, colsums, total)
+    rowdist2 = zeros(Float64, N)
+    coldist2 = zeros(Float64, M)
+    inertia  = 0.0
     tmpN = zeros(UInt32, 1)
     tmpM = zeros(UInt32, 1)
     open(input) do file
@@ -286,12 +275,16 @@ function compute_total_inertia_dense(input, N, M, chunksize, rowsums, colsums, t
             read!(stream, buffer)
             X_chunk = Float64.(permutedims(reshape(buffer, M, batch_size)))
             for i in 1:batch_size
-                ri = rowsums[n + i - 1]
+                global_i = n + i - 1
+                ri = rowsums[global_i]
                 for j in 1:M
                     cj = colsums[j]
                     expected = ri * cj / total
                     if expected > 0
-                        inertia += (Float64(X_chunk[i, j]) - expected)^2 / expected
+                        s2 = (Float64(X_chunk[i, j]) - expected)^2 / expected
+                        rowdist2[global_i] += s2
+                        coldist2[j]        += s2
+                        inertia            += s2
                     end
                 end
             end
@@ -299,5 +292,8 @@ function compute_total_inertia_dense(input, N, M, chunksize, rowsums, colsums, t
         end
         close(stream)
     end
-    return inertia / total
+    # Each S_ij^2 was accumulated as chi-square cell value; divide by total once.
+    rowdist2 ./= total
+    coldist2 ./= total
+    return inertia / total, rowdist2, coldist2
 end

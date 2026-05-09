@@ -11,13 +11,27 @@ function checkNaN(X::AbstractArray)
 end
 
 # Output the result of CA. Accepts a NamedTuple (preferred) or Tuple
-# (legacy callers). Indexed access is used so both shapes work.
+# (legacy callers). Indexed access is used so both shapes work; richer
+# NamedTuple fields (rowstd, masses, contributions, cos²) are written when
+# present.
 function output(outdir::AbstractString, out)
     write_csv(joinpath(outdir, "Row_coordinates.csv"),  out[1])
     write_csv(joinpath(outdir, "Col_coordinates.csv"),  out[2])
     write_csv(joinpath(outdir, "Singular_values.csv"),  out[3])
     write_csv(joinpath(outdir, "Inertia.csv"),          out[4])
     write_csv(joinpath(outdir, "Total_inertia.csv"),    out[5])
+
+    if out isa NamedTuple
+        names = propertynames(out)
+        :rowstd     in names && write_csv(joinpath(outdir, "Row_standard_coordinates.csv"), out.rowstd)
+        :colstd     in names && write_csv(joinpath(outdir, "Col_standard_coordinates.csv"), out.colstd)
+        :rowmass    in names && write_csv(joinpath(outdir, "Row_mass.csv"),                 out.rowmass)
+        :colmass    in names && write_csv(joinpath(outdir, "Col_mass.csv"),                 out.colmass)
+        :rowcontrib in names && write_csv(joinpath(outdir, "Row_contributions.csv"),        out.rowcontrib)
+        :colcontrib in names && write_csv(joinpath(outdir, "Col_contributions.csv"),        out.colcontrib)
+        :rowcos2    in names && write_csv(joinpath(outdir, "Row_cos2.csv"),                 out.rowcos2)
+        :colcos2    in names && write_csv(joinpath(outdir, "Col_cos2.csv"),                 out.colcos2)
+    end
 end
 
 write_csv(filename::AbstractString, data) = writedlm(filename, data, ',')

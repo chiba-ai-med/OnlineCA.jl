@@ -62,37 +62,59 @@ mm2bin(mmfile=joinpath(tmp, "Data.mtx"),
 # Use OnlinePCA's bincoo2bin if available, otherwise OnlineNMF
 bincoo2bin(bincoofile=bincoofile, binfile=joinpath(tmp, "Data.bincoo.zst"))
 
-# Reference CA: compute exact CA in-memory for comparison
+# Reference CA: compute exact CA in-memory for comparison.
+# Returns the same NamedTuple shape as the OOC implementation (Phase 3+).
 function reference_ca(X, dim)
     X = Float64.(X)
     n_total = sum(X)
     P = X ./ n_total
-    r = vec(sum(P, dims=2))  # row masses
-    c = vec(sum(P, dims=1))  # column masses
-    # Standardized residual matrix
+    r = vec(sum(P, dims=2))   # row masses
+    c = vec(sum(P, dims=1))   # column masses
     Dr_inv_sqrt = Diagonal(1.0 ./ sqrt.(r))
     Dc_inv_sqrt = Diagonal(1.0 ./ sqrt.(c))
     S = Dr_inv_sqrt * (P - r * c') * Dc_inv_sqrt
-    # SVD
     U_s, sigma_s, V_s = svd(S)
-    # Row and column coordinates (principal coordinates)
-    F = zeros(size(X, 1), dim)
-    G = zeros(size(X, 2), dim)
-    for k in 1:dim
-        F[:, k] = sigma_s[k] .* U_s[:, k]
-        G[:, k] = sigma_s[k] .* V_s[:, k]
-    end
-    # Total inertia
-    total_inertia = sum(S .^ 2)
-    return F, G, sigma_s[1:dim], sigma_s[1:dim] .^ 2, total_inertia
+
+    sigma_dim = sigma_s[1:dim]
+    U_dim     = U_s[:, 1:dim]
+    V_dim     = V_s[:, 1:dim]
+
+    rowstd     = Dr_inv_sqrt * U_dim
+    colstd     = Dc_inv_sqrt * V_dim
+    rowcoord   = rowstd .* sigma_dim'
+    colcoord   = colstd .* sigma_dim'
+    rowcontrib = U_dim .^ 2
+    colcontrib = V_dim .^ 2
+
+    rowdist2 = vec(sum(S .^ 2, dims=2))   # Σ_j S_ij²
+    coldist2 = vec(sum(S .^ 2, dims=1))   # Σ_i S_ij²
+    rowcos2  = (rowcoord .^ 2) ./ rowdist2
+    colcos2  = (colcoord .^ 2) ./ coldist2
+
+    return (rowcoord       = rowcoord,
+            colcoord       = colcoord,
+            sigma          = sigma_dim,
+            inertia        = sigma_dim .^ 2,
+            total_inertia  = sum(S .^ 2),
+            rowstd         = rowstd,
+            colstd         = colstd,
+            rowmass        = r,
+            colmass        = c,
+            rowcontrib     = rowcontrib,
+            colcontrib     = colcontrib,
+            rowcos2        = rowcos2,
+            colcos2        = colcos2)
 end
 
-ref_F, ref_G, ref_sigma, ref_inertia, ref_total_inertia = reference_ca(data, 3)
+ref = reference_ca(data, 3)
+ref_F, ref_G, ref_sigma, ref_inertia, ref_total_inertia =
+    ref.rowcoord, ref.colcoord, ref.sigma, ref.inertia, ref.total_inertia
 
 # Tests
 println("Running all tests...")
 
 include("test_api_contract.jl")
+include("test_outputs.jl")
 include("test_ca.jl")
 include("test_sparse_ca.jl")
 include("test_bincoo_ca.jl")

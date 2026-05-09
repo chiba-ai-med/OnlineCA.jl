@@ -20,6 +20,7 @@ using Statistics:
 export output, parse_commandline, ca, sparse_ca, bincoo_ca
 
 include("Utils.jl")
+include("core.jl")
 include("ca.jl")
 include("sparse_ca.jl")
 include("bincoo_ca.jl")

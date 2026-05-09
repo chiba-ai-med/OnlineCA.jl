@@ -237,28 +237,24 @@ function ca_rsvd_bincoo(input, N, M, dim, noversamples, niter, chunksize, rowsum
     U_dim = U_svd[:, 1:dim]
     V_dim = Vt[:, 1:dim]
 
-    F = zeros(Float64, N, dim)
-    G_coord = zeros(Float64, M, dim)
-    for k in 1:dim
-        for i in 1:N
-            F[i, k] = sigma_dim[k] * U_dim[i, k]
-        end
-        for j in 1:M
-            G_coord[j, k] = sigma_dim[k] * V_dim[j, k]
-        end
-    end
+    total_inertia, rowdist2, coldist2 =
+        compute_inertias_bincoo(input, N, M, rowsums, colsums, total)
 
-    total_inertia = compute_total_inertia_bincoo(input, N, M, rowsums, colsums, total)
-    inertia = sigma_dim .^ 2
-
-    return (rowcoord=F, colcoord=G_coord, sigma=sigma_dim, inertia=inertia,
-            total_inertia=total_inertia)
+    return _build_result(U_dim, V_dim, sigma_dim,
+                         rowsums, colsums, total,
+                         total_inertia, rowdist2, coldist2)
 end
 
-# Compute total inertia (bincoo)
-function compute_total_inertia_bincoo(input, N, M, rowsums, colsums, total)
-    chi2_contribution = 0.0
-    sum_expected_nonzero = 0.0
+# Compute total inertia + per-row/col S_ij^2 sums (bincoo). Same algebra as
+# the sparse version, with x ≡ 1 for every nonzero cell.
+function compute_inertias_bincoo(input, N, M, rowsums, colsums, total)
+    chi2_nonzero          = 0.0
+    sum_e_nonzero         = 0.0
+    rowdist2              = zeros(Float64, N)
+    coldist2              = zeros(Float64, M)
+    rowexp_nonzero        = zeros(Float64, N)
+    colexp_nonzero        = zeros(Float64, M)
+
     open(input) do file
         stream = ZstdDecompressorStream(file)
         tmpN = zeros(UInt32, 1)
@@ -269,15 +265,30 @@ function compute_total_inertia_bincoo(input, N, M, rowsums, colsums, total)
         while !eof(stream)
             read!(stream, buf)
             row, col = buf[1], buf[2]
-            x = 1.0
             e = rowsums[row] * colsums[col] / total
             if e > 0
-                chi2_contribution += (x - e)^2 / e
-                sum_expected_nonzero += e
+                chi2_cell             = (1.0 - e)^2 / e
+                chi2_nonzero         += chi2_cell
+                sum_e_nonzero        += e
+                rowdist2[row]        += chi2_cell
+                coldist2[col]        += chi2_cell
+                rowexp_nonzero[row]  += e
+                colexp_nonzero[col]  += e
             end
         end
         close(stream)
     end
-    total_chi2 = chi2_contribution + (total - sum_expected_nonzero)
-    return total_chi2 / total
+
+    @inbounds for i in 1:N
+        rowdist2[i] += rowsums[i] - rowexp_nonzero[i]
+    end
+    @inbounds for j in 1:M
+        coldist2[j] += colsums[j] - colexp_nonzero[j]
+    end
+
+    total_chi2 = chi2_nonzero + (total - sum_e_nonzero)
+
+    rowdist2 ./= total
+    coldist2 ./= total
+    return total_chi2 / total, rowdist2, coldist2
 end
