@@ -17,12 +17,14 @@ using SparseArrays:
 using Statistics:
     mean
 
-export output, parse_commandline, ca, sparse_ca, bincoo_ca
+export output, parse_commandline, ca, sparse_ca, bincoo_ca,
+    project_rows, project_columns
 
 include("Utils.jl")
 include("core.jl")
 include("ca.jl")
 include("sparse_ca.jl")
 include("bincoo_ca.jl")
+include("projection.jl")
 
 end
