@@ -140,13 +140,49 @@ subplots(out_bincoo_ca, group)
 ![BinCOO_CA](./docs/src/figure/bincoo_ca.png)
 
 ## Output files
-Each CA function returns a tuple `(F, G, σ, Inertia, TotalInertia)` and, when `outdir` is set, writes the following CSV files to `outdir`:
+Each CA function returns a NamedTuple. The first five fields preserve the original positional contract — `(rowcoord, colcoord, sigma, inertia, total_inertia) = ca(...)` and integer indexing `out[1]`...`out[5]` keep working — and richer fields are appended for interpretation and visualization:
 
-- `Row_coordinates.csv` : Row principal coordinates `F` (N × dim)
-- `Col_coordinates.csv` : Column principal coordinates `G` (M × dim)
-- `Singular_values.csv` : Singular values `σ` (dim,)
-- `Inertia.csv` : Inertia explained by each dimension (`σ.^2`)
-- `Total_inertia.csv` : Total inertia (chi-squared / n)
+| Field | Meaning |
+|---|---|
+| `rowcoord`, `colcoord` | Principal coordinates (`D^{-1/2} U Σ`, `D^{-1/2} V Σ`) |
+| `rowstd`,   `colstd`   | Standard coordinates (`D^{-1/2} U`, `D^{-1/2} V`) |
+| `rowmass`,  `colmass`  | Marginal probabilities (`r_p`, `c_p`) |
+| `rowcontrib`, `colcontrib` | Per-axis contributions (`U.^2`, `V.^2`; columns sum to 1) |
+| `rowcos2`,  `colcos2`  | Squared cosines of profile-to-axis angles |
+| `sigma`, `inertia`, `total_inertia` | SVD spectrum and total chi-squared / n |
+| `valid_rows`, `valid_cols` | Indices of non-zero-mass rows / columns |
+
+When `outdir` is set, each field is written as a CSV under the corresponding name (e.g. `Row_coordinates.csv`, `Row_standard_coordinates.csv`, `Row_mass.csv`, `Row_contributions.csv`, `Row_cos2.csv`, ...).
+
+## Reproducibility, precision, supplementary projection
+
+```julia
+# Reproducible runs
+out  = ca(input=joinpath(tmp, "Data.zst"), dim=3, seed=42)
+
+# Float32 storage (≈ 2× memory savings for U/V/coords)
+out32 = ca(input=joinpath(tmp, "Data.zst"), dim=3, T=Float32)
+
+# Project new (passive) rows / columns into the trained CA space
+F_new = project_rows(out,    new_rows)     # n_new × dim
+G_new = project_columns(out, new_cols)     # n_new × dim
+```
+
+## Multiple Correspondence Analysis (MCA)
+
+`mca(table)` runs MCA on an `N × q` integer-coded categorical table by building the indicator matrix, calling `bincoo_ca`, and attaching MCA metadata (`variables`, `categories`, `var_of_category`, `q`). Optional `correction = :benzecri / :greenacre` applies the standard eigenvalue adjustment.
+
+```julia
+# Synthetic categorical data: 200 obs × 4 vars, each with 3 levels
+table = rand(1:3, 200, 4)
+
+out_mca = mca(table; dim=3, correction=:benzecri,
+              var_names=["age", "sex", "region", "occupation"])
+
+# Adjusted inertia (Benzecri / Greenacre); raw values still in `inertia`
+out_mca.inertia_adjusted        # length dim
+out_mca.total_inertia_adjusted  # scalar
+```
 
 ## Command line usage
 The type of input file is assumed to be CSV, MM, or BinCOO format, and is preprocessed to a Zstandard-compressed binary file by `csv2bin`, `mm2bin`, or `bincoo2bin` in the `OnlinePCA` package. The binary file is specified as the input of the CA functions in `OnlineCA`. All CA functions can be performed as command line tools with the same parameter names like below.
