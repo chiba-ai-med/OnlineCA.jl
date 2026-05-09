@@ -92,6 +92,7 @@ ref_F, ref_G, ref_sigma, ref_inertia, ref_total_inertia = reference_ca(data, 3)
 # Tests
 println("Running all tests...")
 
+include("test_api_contract.jl")
 include("test_ca.jl")
 include("test_sparse_ca.jl")
 include("test_bincoo_ca.jl")
